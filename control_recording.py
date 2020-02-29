@@ -22,14 +22,14 @@
 import multiprocessing
 
 import obspython as obs
-from obs_controller import start_client
+from obs_controller import start_client, obs_controller
 
 Debug_Mode = False
 Enabled_Recording = True
-cmd = start_client()
 # ------------------------------------------------------------
 # OBS Script Functions
 # ------------------------------------------------------------
+
 
 def script_defaults(settings):
     pass
@@ -76,12 +76,13 @@ def script_unload():
 
 def script_update(settings):
     global Debug_Mode
+    global cmd
     print("Calling Update")
 
     if obs.obs_data_get_bool(settings, "enabled") is True:
         print("Loading Timer")
-
-        obs.timer_add(timer_check_recording, 1000)
+        cmd = start_client()
+        obs.timer_add(timer_check_recording, 100)
     else:
         print("Unloading Timer")
 
@@ -98,12 +99,15 @@ def timer_check_recording():
     # print("Timer Event: timer_check_recording")
     global cmd
 
-    if cmd.state == "start recording":
+    if not obs.obs_frontend_recording_active() and cmd.state == "start recording":
         # print("Find gzclient")
-        if not obs.obs_frontend_recording_active():
-            obs.obs_frontend_recording_start()
+        obs.obs_frontend_recording_start()
             # print("Recording is started.")
-    elif cmd.state == "stop recording" and obs.obs_frontend_recording_active():
+    elif obs.obs_frontend_recording_active() and cmd.state == "stop recording":
         obs.obs_frontend_recording_stop()
+        cmd.state = "idle..."
+    elif cmd.state == "disable":
+        # obs.obs_frontend_recording_stop()
+        obs.timer_remove(timer_check_recording)
         # print("Not find gzclient")
         # print("Recording is stopped.")
