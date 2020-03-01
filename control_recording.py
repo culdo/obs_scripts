@@ -41,7 +41,7 @@ def script_description():
 
     return "<b>OBS Recorder Controller</b>" + \
            "<hr>" + \
-           "Auto stop recording when Gazebo get closed." + \
+           "Control OBS using IPC of python." + \
            "<br/><br/>" + \
            "Made by George Hu, © 2018" + \
            "<hr>"
