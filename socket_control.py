@@ -120,7 +120,12 @@ def timer_check_recording():
         try:
             msg = conn.recv(4096).decode('ascii')
         except BlockingIOError:
-            pass
+            # Wait incoming msg and prevent to close connection.
+            msg = True
+        except ConnectionResetError:
+            # In Windows, raise ConnectionResetError when connection closed.
+            print("ConnectionResetError")
+            msg = False
         if msg:
             if not obs.obs_frontend_recording_active() and msg == "start recording":
                 obs.obs_frontend_recording_start()
