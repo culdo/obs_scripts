@@ -19,23 +19,25 @@
 # ------------------------------------------------------------
 # Main Script Area
 # ------------------------------------------------------------
+import time
+
 import obspython as obs
 import socket
 
+Debug_Mode = False
+enabled_flag = False
+is_connected = False
+
+# Create socket when script loaded
 s = socket.socket()
 s.setblocking(False)
 s.bind(("localhost", 50007))
 s.listen(1)
 
 
-Debug_Mode = False
-enabled_flag = False
-is_connected = False
 # ------------------------------------------------------------
 # OBS Script Functions
 # ------------------------------------------------------------
-
-
 def script_defaults(settings):
     pass
     print("Calling defaults")
@@ -48,53 +50,30 @@ def script_description():
            "<hr>" + \
            "Control OBS using IPC of python." + \
            "<br/><br/>" + \
+           "Enabled when script is added." + \
+           "<br/><br/>" + \
            "Made by George Hu, © 2018" + \
            "<hr>"
 
 
 def script_load(settings):
     print("Calling Load")
-    obs.obs_data_set_bool(settings, "enabled", False)
 
 
 def script_properties():
     print("Calling properties")
 
-    props = obs.obs_properties_create()
-    obs.obs_properties_add_bool(props, "enabled", "Enabled")
-
-    obs.obs_properties_add_bool(props, "debug_mode", "Debug Mode")
-    return props
-
 
 def script_save(settings):
     print("Calling Save")
-    # script_update(settings)
 
 
 def script_unload():
     print("Calling unload")
 
-    obs.timer_remove(timer_check_recording)
-
 
 def script_update(settings):
-    global Debug_Mode
-    global enabled_flag
     print("Calling Update")
-
-    if obs.obs_data_get_bool(settings, "enabled") and not enabled_flag:
-        enabled_flag = True
-        print("Loading Timer")
-
-        obs.timer_add(timer_check_recording, 100)
-    elif not obs.obs_data_get_bool(settings, "enabled") and enabled_flag:
-        enabled_flag = False
-        print("Unloading Timer")
-
-        obs.timer_remove(timer_check_recording)
-
-    Debug_Mode = obs.obs_data_get_bool(settings, "debug_mode")
 
 
 # ------------------------------------------------------------
@@ -105,8 +84,6 @@ def timer_check_recording():
     # print("Timer Event: timer_check_recording")
     global is_connected
     global conn
-    # buffer msg for repeating check if recording started.
-    global msg
 
     if not is_connected:
         try:
@@ -117,27 +94,57 @@ def timer_check_recording():
         except BlockingIOError:
             pass
     else:
-        try:
-            msg = conn.recv(4096).decode('ascii')
-        except BlockingIOError:
-            # Wait incoming msg and prevent to close connection.
-            msg = True
-        except ConnectionResetError:
-            # In Windows, raise ConnectionResetError when connection closed.
-            print("ConnectionResetError")
-            msg = False
-        if msg:
-            if not obs.obs_frontend_recording_active() and msg == "start recording":
-                obs.obs_frontend_recording_start()
-                print(msg)
-            elif obs.obs_frontend_recording_active() and msg == "stop recording":
-                obs.obs_frontend_recording_stop()
-                print(msg)
+        communicate(conn)
+
+
+def communicate(conn):
+    # buffer msg for repeating check if recording started.
+    global msg
+    global is_connected
+    try:
+        msg = conn.recv(4096).decode('ascii')
+        print("msg: %s", msg)
+    except BlockingIOError:
+        # Wait incoming msg and prevent to close connection.
+        return
+    except ConnectionResetError:
+        # In Windows, raise ConnectionResetError when connection is closed.
+        print("ConnectionResetError")
+        msg = False
+    if msg == "start recording":
+        obs.timer_add(start_recording, 100)
+    elif msg == "stop recording":
+        obs.timer_add(stop_recording, 100)
+    else:
+        print("Connection Closed.")
+        conn.close()
+        is_connected = False
+
+
+is_stopped = True
+
+
+def start_recording():
+    global is_stopped
+    if is_stopped:
+        if not obs.obs_frontend_recording_active():
+            obs.obs_frontend_recording_start()
+            print("Start recording...")
         else:
-            print("Connection Closed.")
-            conn.close()
-            is_connected = False
+            obs.timer_remove(start_recording)
 
 
-        # print("Not find gzclient")
-        # print("Recording is stopped.")
+def stop_recording():
+    global is_stopped
+
+    if obs.obs_frontend_recording_active():
+        obs.obs_frontend_recording_stop()
+        print("Stop recording...")
+        is_stopped = False
+    else:
+        obs.timer_remove(stop_recording)
+        is_stopped = True
+
+
+# Add timer for command checking
+obs.timer_add(timer_check_recording, 100)
